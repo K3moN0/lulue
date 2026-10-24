@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14121a">
+<title>Lulue</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #14121a; --panel: #1f1c28; --line: #2e2a3a; --text: #ece8f4; --muted: #9a93ab;
+    --accent: #e98aa8; --listen: #6fd3a4; --think: #f2c46d; --speak: #e98aa8; --danger: #ef6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+  }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
+  header h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .icon-btn { background: none; border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; }
+
+  #stage { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 0 12px; }
+  #orb {
+    width: 150px; height: 150px; border-radius: 50%; border: none;
+    background: radial-gradient(circle at 35% 30%, #f6b8cb, var(--accent) 55%, #8d4a66);
+    display: grid; place-items: center; font-size: 56px; font-weight: 700; color: #2a1520;
+    box-shadow: 0 0 0 0 transparent; transition: box-shadow .3s, transform .2s;
+  }
+  #orb:active { transform: scale(.96); }
+  body[data-state="listening"] #orb { box-shadow: 0 0 0 8px var(--listen); animation: pulse 1.6s infinite; }
+  body[data-state="thinking"]  #orb { box-shadow: 0 0 0 8px var(--think); }
+  body[data-state="speaking"]  #orb { box-shadow: 0 0 0 8px var(--speak); animation: talk .35s infinite alternate; }
+  body[data-state="loading"]   #orb { opacity: .6; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 16px rgba(111,211,164,.25); } }
+  @keyframes talk { to { transform: scale(1.04); } }
+  #status { color: var(--muted); min-height: 1.45em; text-align: center; }
+  #progress { width: 100%; max-width: 320px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; display: none; }
+  #progress > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  #end { display: none; background: none; border: 1px solid var(--danger); color: var(--danger); border-radius: 999px; padding: 6px 18px; }
+  body.active #end { display: inline-block; }
+
+  #log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
+  .msg { max-width: 85%; padding: 8px 12px; border-radius: 14px; white-space: pre-wrap; word-wrap: break-word; }
+  .msg.user { align-self: flex-end; background: #2d2840; }
+  .msg.assistant { align-self: flex-start; background: var(--panel); }
+  .msg.interim { opacity: .55; font-style: italic; }
+
+  form#typer { display: flex; gap: 8px; padding: 8px 0 12px; }
+  #typer input { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; color: var(--text); font: inherit; }
+  #typer button { background: var(--accent); color: #2a1520; border: none; border-radius: 12px; padding: 0 16px; font-weight: 600; }
+
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 16px; width: min(560px, calc(100% - 24px)); max-height: 90vh; padding: 16px; }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  dialog h2 { margin: 0 0 12px; font-size: 18px; }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 4px; }
+  select, textarea, input[type=text] { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; }
+  textarea { min-height: 110px; resize: vertical; }
+  input[type=range] { width: 100%; }
+  .row { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .row button { flex: 1; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 10px; }
+  .row button.primary { background: var(--accent); color: #2a1520; border: none; font-weight: 600; }
+  .row button.danger { border-color: var(--danger); color: var(--danger); }
+  .hint { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+</style>
+</head>
+<body data-state="idle">
+  <header>
+    <h1>Lulue</h1>
+    <button class="icon-btn" id="openSettings" aria-label="Réglages">Réglages</button>
+  </header>
+
+  <section id="stage">
+    <button id="orb" aria-label="Parler avec Lulue">L</button>
+    <div id="status">Touche le cercle pour commencer</div>
+    <div id="progress"><div></div></div>
+    <button id="end">Terminer la conversation</button>
+  </section>
+
+  <main id="log" aria-live="polite"></main>
+
+  <form id="typer" autocomplete="off">
+    <input id="typed" placeholder="Ou écris-lui ici…" enterkeyhint="send">
+    <button type="submit">Envoyer</button>
+  </form>
+
+  <dialog id="settings">
+    <h2>Réglages</h2>
+
+    <label for="model">Cerveau (modèle)</label>
+    <select id="model"></select>
+    <p class="hint">Téléchargé une seule fois (en Wi-Fi de préférence), puis gardé sur le téléphone.</p>
+
+    <label for="voice">Voix</label>
+    <select id="voice"></select>
+    <label for="rate">Vitesse de la voix : <span id="rateVal"></span></label>
+    <input type="range" id="rate" min="0.7" max="1.4" step="0.05">
+    <label for="pitch">Hauteur de la voix : <span id="pitchVal"></span></label>
+    <input type="range" id="pitch" min="0.6" max="1.6" step="0.05">
+    <div class="row"><button type="button" id="testVoice">Tester la voix</button></div>
+
+    <label for="userName">Ton prénom</label>
+    <input type="text" id="userName" placeholder="Pour qu'elle t'appelle par ton prénom">
+
+    <label for="persona">Personnalité de Lulue</label>
+    <textarea id="persona"></textarea>
+
+    <label for="notes">Ses souvenirs de toi (mis à jour automatiquement, modifiables)</label>
+    <textarea id="notes"></textarea>
+
+    <div class="row">
+      <button type="button" class="danger" id="forget">Tout effacer</button>
+      <button type="button" class="primary" id="saveSettings">Enregistrer</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
